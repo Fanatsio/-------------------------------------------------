@@ -1,180 +1,132 @@
-import heapq
-import time
-import random
-import matplotlib.pyplot as plt
 import networkx as nx
+import matplotlib.pyplot as plt
+import random
+from collections import deque
+import time
 
-def dfs(graph, start, target=None):
-    visited = set()
-    order = []
-    stack = [start]
-
-    while stack:
-        vertex = stack.pop()
-        if vertex not in visited:
-            visited.add(vertex)
-            order.append(vertex)
-            if target is not None and vertex == target:
-                break
-            stack.extend(sorted(set(graph[vertex].keys()) - visited, reverse=True))
-
-    return order
-
-def bfs(graph, start, target=None):
-    visited = set()
-    queue = [start]
-    order = []
-
-    while queue:
-        vertex = queue.pop(0)
-        if vertex not in visited:
-            visited.add(vertex)
-            order.append(vertex)
-            if target is not None and vertex == target:
-                break
-            queue.extend(sorted(set(graph[vertex].keys()) - visited))
-
-    return order
-
-def dijkstra(graph, start, target=None):
-    visited = set()
-    pq = [(0, start)]
-    distances = {start: 0}
-    previous_vertices = {start: None}
-    order = []
-
-    while pq:
-        cost, vertex = heapq.heappop(pq)
-        if vertex in visited:
-            continue
-        visited.add(vertex)
-        order.append(vertex)
-        if target is not None and vertex == target:
+def generate_connected_graph(n, p, weighted=False):
+    while True:
+        G = nx.gnp_random_graph(n, p, directed=False)
+        if nx.is_connected(G):
             break
-        for neighbor, weight in graph.get(vertex, {}).items():
-            if neighbor not in visited:
-                new_cost = cost + weight
-                if neighbor not in distances or new_cost < distances[neighbor]:
-                    distances[neighbor] = new_cost
-                    previous_vertices[neighbor] = vertex
-                    heapq.heappush(pq, (new_cost, neighbor))
+    
+    if weighted:
+        for (u, v) in G.edges():
+            G.edges[u, v]['weight'] = random.randint(1, 10)
+    
+    return G
 
-    path = []
-    distance = float('inf')
-    if target is not None and target in distances:
-        current_vertex = target
-        while current_vertex is not None:
-            path.append(current_vertex)
-            current_vertex = previous_vertices.get(current_vertex)
-        path = path[::-1]
-        distance = distances.get(target, float('inf'))
-        if distance == float('inf'):
-            path = []
+def bfs(graph, start_vertex):
+    visited = set()
+    queue = deque([start_vertex])
+    order = []
+    
+    while queue:
+        vertex = queue.popleft()
+        if vertex not in visited:
+            visited.add(vertex)
+            order.append(vertex)
+            queue.extend(neighbor for neighbor in graph.neighbors(vertex) if neighbor not in visited)
+    
+    return order
 
-    return order, distance, path
+def dfs(graph, start_vertex):
+    visited = set()
+    order = []
+    
+    def dfs_recursive(vertex):
+        if vertex not in visited:
+            visited.add(vertex)
+            order.append(vertex)
+            for neighbor in graph.neighbors(vertex):
+                dfs_recursive(neighbor)
+    
+    dfs_recursive(start_vertex)
+    return order
 
-def visualize_graph(graph, title="Граф"):
-    G = nx.Graph()
-    for vertex in graph:
-        for neighbor, weight in graph[vertex].items():
-            G.add_edge(vertex, neighbor, weight=weight)
-    pos = nx.spring_layout(G)
+def dijkstra(graph, start_vertex):
+    return nx.single_source_dijkstra_path_length(graph, start_vertex)
+
+def draw_graph(graph, title):
+    pos = nx.kamada_kawai_layout(graph)
     plt.figure(figsize=(8, 6))
-    nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=500, font_size=10)
-    labels = nx.get_edge_attributes(G, 'weight')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
     plt.title(title)
+    nx.draw(graph, pos, with_labels=True, node_color='lightblue', edge_color='gray')
+    
+    if nx.get_edge_attributes(graph, 'weight'):
+        labels = nx.get_edge_attributes(graph, 'weight')
+        nx.draw_networkx_edge_labels(graph, pos, edge_labels=labels)
+    
     plt.show()
 
-def measure_time(algorithm, graph, start, target=None):
+# Генерация графов
+sizes = [20, 40, 60, 80, 100]
+p = 0.3  # Вероятность наличия ребра
+
+unweighted_graphs = [(generate_connected_graph(n, p), f"Невзвешенный граф ({n} вершин)") for n in sizes]
+weighted_graphs = [(generate_connected_graph(n, p, weighted=True), f"Взвешенный граф ({n} вершин)") for n in sizes]
+
+# Словарь для хранения времени выполнения
+time_results = {
+    "BFS": [],
+    "DFS": [],
+    "Dijkstra": []
+}
+
+# Применение алгоритмов ко всем графам
+for graph, title in unweighted_graphs + weighted_graphs:
+    start_vertex = list(graph.nodes())[0]
+    
+    # BFS
     start_time = time.perf_counter()
-    result = algorithm(graph, start, target)
-    elapsed_time = time.perf_counter() - start_time
-    return elapsed_time, result
+    bfs_order = bfs(graph, start_vertex)
+    bfs_time = time.perf_counter() - start_time
+    time_results["BFS"].append(bfs_time)
+    
+    # DFS
+    start_time = time.perf_counter()
+    dfs_order = dfs(graph, start_vertex)
+    dfs_time = time.perf_counter() - start_time
+    time_results["DFS"].append(dfs_time)
+    
+    # Dijkstra (только для взвешенных графов)
+    if "Взвешенный" in title:
+        start_time = time.perf_counter()
+        dijkstra_distances = dijkstra(graph, start_vertex)
+        dijkstra_time = time.perf_counter() - start_time
+        time_results["Dijkstra"].append(dijkstra_time)
+    else:
+        time_results["Dijkstra"].append(None)  # Для невзвешенных графов Dijkstra не применяется
+    
+    print(f"{title}:")
+    print(f"  BFS порядок: {bfs_order}")
+    print(f"  Время BFS: {bfs_time:.6f} сек")
+    print(f"  DFS порядок: {dfs_order}")
+    print(f"  Время DFS: {dfs_time:.6f} сек")
+    if "Взвешенный" in title:
+        print(f"  Dijkstra расстояния: {dijkstra_distances}")
+        print(f"  Время Dijkstra: {dijkstra_time:.6f} сек")
+    print()
 
-def process_graph(graph, name):
-    print(f"\n{name}:")
-    for algorithm, label in [(bfs, "BFS"), (dfs, "DFS"), (dijkstra, "Дейкстра")]:
-        if label == "Дейкстра":
-            time_taken, result = measure_time(algorithm, graph, 0, 4)
-            order, distance, path = result
-            print(f"{label}: {time_taken:.6f} сек, Порядок обхода: {order}, Длина пути: {distance}, Путь: {path}")
-        else:
-            time_taken, result = measure_time(algorithm, graph, 0)
-            print(f"{label}: {time_taken:.6f} сек, Порядок обхода: {result}")
-        visualize_graph(graph, title=name)
+# Визуализация графов (опционально)
+# for graph, title in unweighted_graphs + weighted_graphs:
+#     draw_graph(graph, title)
 
-def generate_random_graph(size):
-    return {i: {random.choice(range(size)): random.randint(1, 10) for _ in range(random.randint(1, min(5, size-1)))} for i in range(size)}
+# Построение графика сравнения времени выполнения
+plt.figure(figsize=(10, 6))
 
-def plot_execution_times(sizes, bfs_times, dfs_times, dijkstra_times):
-    plt.figure(figsize=(10, 6))
-    plt.plot(sizes, bfs_times, marker='o', label='BFS', linestyle='-', color='r')
-    plt.plot(sizes, dfs_times, marker='o', label='DFS', linestyle='-', color='g')
-    plt.plot(sizes, dijkstra_times, marker='o', label='Дейкстра', linestyle='-', color='b')
-    plt.xlabel('Размер графа (количество вершин)')
-    plt.ylabel('Время выполнения (сек)')
-    plt.title('Сравнение времени выполнения BFS, DFS и Дейкстры')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+# Данные для взвешенных графов
+bfs_times_weighted = time_results["BFS"][len(sizes):]  # Взвешенные графы
+dfs_times_weighted = time_results["DFS"][len(sizes):]  # Взвешенные графы
+dijkstra_times_weighted = [t for t in time_results["Dijkstra"][len(sizes):] if t is not None]  # Взвешенные графы
 
-# Графы
-small_graph = {
-    0: {1: 1, 2: 1},
-    1: {0: 1, 3: 1, 4: 1},
-    2: {0: 1, 4: 1},
-    3: {1: 1, 4: 1},
-    4: {1: 1, 2: 1, 3: 1}
-}
+plt.plot(sizes, bfs_times_weighted, marker='o', label="BFS (взвешенные)", color='blue')
+plt.plot(sizes, dfs_times_weighted, marker='o', label="DFS (взвешенные)", color='red')
+plt.plot(sizes, dijkstra_times_weighted, marker='o', label="Dijkstra (взвешенные)", color='green')
 
-medium_graph = {
-    0: {1: 1, 2: 1, 3: 1},
-    1: {0: 1, 4: 1, 5: 1},
-    2: {0: 1, 6: 1, 7: 1},
-    3: {0: 1, 8: 1, 9: 1},
-    4: {1: 1, 10: 1, 11: 1},
-    5: {1: 1, 12: 1, 13: 1},
-    6: {2: 1, 14: 1, 15: 1},
-    7: {2: 1, 16: 1, 17: 1},
-    8: {3: 1, 18: 1, 19: 1},
-    9: {3: 1, 10: 1, 11: 1},
-    10: {4: 1, 9: 1, 12: 1},
-    11: {4: 1, 9: 1, 13: 1},
-    12: {5: 1, 10: 1, 14: 1},
-    13: {5: 1, 11: 1, 15: 1},
-    14: {6: 1, 12: 1, 16: 1},
-    15: {6: 1, 13: 1, 17: 1},
-    16: {7: 1, 14: 1, 18: 1},
-    17: {7: 1, 15: 1, 19: 1},
-    18: {8: 1, 16: 1, 19: 1},
-    19: {8: 1, 17: 1, 18: 1}
-}
-
-weighted_graph = {
-    0: {1: 4, 2: 1},
-    1: {0: 4, 3: 1},
-    2: {0: 1, 3: 2},
-    3: {1: 1, 2: 2, 4: 3},
-    4: {3: 3}
-}
-
-# Обработка графов
-for graph, name in [(small_graph, "Малый граф"), (medium_graph, "Средний граф"), (weighted_graph, "Взвешенный граф")]:
-    process_graph(graph, name)
-
-# Случайные графы
-sizes = [10, 20, 40, 60, 80, 100]
-bfs_times = []
-dfs_times = []
-dijkstra_times = []
-
-for size in sizes:
-    random_graph = generate_random_graph(size)
-    print(f"\nСлучайный граф из {size} вершин")
-    for algorithm, times_list, label in [(bfs, bfs_times, "BFS"), (dfs, dfs_times, "DFS"), (dijkstra, dijkstra_times, "Дейкстра")]:
-        time_taken, _ = measure_time(algorithm, random_graph, 0)
-        times_list.append(time_taken)
-        print(f"{label}: {time_taken:.6f} сек")
-
-plot_execution_times(sizes, bfs_times, dfs_times, dijkstra_times)
+plt.xlabel("Количество вершин")
+plt.ylabel("Время выполнения (сек)")
+plt.title("Сравнение времени выполнения алгоритмов (взвешенные графы)")
+plt.legend()
+plt.grid(True)
+plt.show()

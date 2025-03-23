@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Мини-поисковая система</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>Мини-поисковая система</h1>
+    <form method="POST">
+        <input type="text" name="query" placeholder="Введите запрос" style="width: 300px;">
+        <input type="submit" value="Поиск">
+    </form>
+    
+    {% if results %}
+        <h2>Результаты поиска:</h2>
+        {% for doc_id, score in results %}
+            <div class="result">
+                <h3>{{ documents[doc_id]['title'] }}</h3>
+                <p>URL: <a href="{{ documents[doc_id]['url'] }}">{{ documents[doc_id]['url'] }}</a></p>
+                <p>Рейтинг: {{ "%.2f"|format(score) }}</p>
+                <p>{{ documents[doc_id]['content'][:200] }}...</p>
+            </div>
+        {% endfor %}
+        {% if graph %}
+            <h2>Визуализация:</h2>
+            <img src="data:image/png;base64,{{ graph }}" alt="График релевантности">
+        {% endif %}
+    {% endif %}
+</body>
+</html>
